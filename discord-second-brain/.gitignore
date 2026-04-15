@@ -1,0 +1,10 @@
+.env
+chroma_db/
+cookies.txt
+*.mp3
+*.mp4
+*.wav
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
