@@ -47,7 +47,7 @@ class MemoHandler:
             # 2. ChromaDB でセマンティック検索（top 3）
             related = self.store.search(text, n_results=3)
             for r in related:
-                session.add_reference(channel_id, r["id"])
+                self.sessions.add_reference(channel_id, r["id"])
 
             # 3. Claude で整理（JSON出力）
             response_text = await claude_client.chat(

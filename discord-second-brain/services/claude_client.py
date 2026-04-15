@@ -153,6 +153,31 @@ async def extract_permanent_idea(session_history: list[dict]) -> dict:
     }
 
 
+async def generate_draft(command: str, history: list[dict]) -> tuple[dict, str]:
+    """
+    セッション履歴からドラフトをJSON形式で生成。
+    保存トリガーをシステムとして送信し、構造化出力を得る。
+    Returns: (parsed_dict, raw_text)
+    """
+    client = _get_client()
+    system = _build_system(command)
+
+    messages = list(history)
+    messages.append({
+        "role": "user",
+        "content": "[保存リクエスト] これまでのセッション内容を整理して、指定のJSON形式でドラフトを作成してください。",
+    })
+
+    response = await client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=4096,
+        system=system,
+        messages=messages,
+    )
+    raw = response.content[0].text.strip()
+    return parse_json_response(raw), raw
+
+
 def parse_json_response(text: str) -> dict:
     """
     Claudeのレスポンスから JSON を抽出してパース。

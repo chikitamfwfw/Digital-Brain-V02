@@ -142,6 +142,70 @@ def render_permanent_note(
     )
 
 
+def render_research_note(
+    zk_id: str,
+    query: str,
+    title: str,
+    summary: str,
+    key_findings: str,
+    sources: str,
+    insights: str,
+    open_questions: str,
+    tags: list,
+    references: list,
+    template: str,
+) -> str:
+    """research-session テンプレートを埋める"""
+    tag_str = ", ".join(f"#{t}" for t in tags) if tags else ""
+    ref_str = "\n".join(f"- {r}" for r in references) if references else "なし"
+    return (
+        template
+        .replace("{{ZK_ID}}", zk_id)
+        .replace("{{DATE}}", today_str())
+        .replace("{{QUERY}}", query)
+        .replace("{{TAGS}}", tag_str)
+        .replace("{{TITLE}}", title.strip() if title else zk_id)
+        .replace("{{SUMMARY}}", summary.strip() if summary else "")
+        .replace("{{KEY_FINDINGS}}", key_findings.strip() if key_findings else "")
+        .replace("{{SOURCES}}", sources.strip() if sources else "")
+        .replace("{{INSIGHTS}}", insights.strip() if insights else "")
+        .replace("{{OPEN_QUESTIONS}}", open_questions.strip() if open_questions else "")
+        .replace("{{REFERENCES}}", ref_str)
+    )
+
+
+def render_planning_note(
+    zk_id: str,
+    topic: str,
+    title: str,
+    situation: str,
+    ideas: str,
+    action_steps: str,
+    concerns: str,
+    next_actions: str,
+    tags: list,
+    references: list,
+    template: str,
+) -> str:
+    """planning-session テンプレートを埋める"""
+    tag_str = ", ".join(f"#{t}" for t in tags) if tags else ""
+    ref_str = "\n".join(f"- {r}" for r in references) if references else "なし"
+    return (
+        template
+        .replace("{{ZK_ID}}", zk_id)
+        .replace("{{DATE}}", today_str())
+        .replace("{{TOPIC}}", topic)
+        .replace("{{TAGS}}", tag_str)
+        .replace("{{TITLE}}", title.strip() if title else zk_id)
+        .replace("{{SITUATION}}", situation.strip() if situation else "")
+        .replace("{{IDEAS}}", ideas.strip() if ideas else "")
+        .replace("{{ACTION_STEPS}}", action_steps.strip() if action_steps else "")
+        .replace("{{CONCERNS}}", concerns.strip() if concerns else "")
+        .replace("{{NEXT_ACTIONS}}", next_actions.strip() if next_actions else "")
+        .replace("{{REFERENCES}}", ref_str)
+    )
+
+
 def truncate_for_discord(text: str, limit: int = 1900) -> str:
     """Discord メッセージ上限に収まるようにトリミング"""
     if len(text) <= limit:
