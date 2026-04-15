@@ -17,9 +17,12 @@ def today_str() -> str:
 def render_fleeting_note(
     zk_id: str,
     raw_text: str,
-    claude_summary: str,
-    tags: list[str],
-    references: list[str],
+    title_ja: str,
+    interpretation: str,
+    significance: str,
+    questions: str,
+    tags: list,
+    references: list,
     template: str,
 ) -> str:
     """fleeting-note テンプレートを埋める"""
@@ -29,9 +32,12 @@ def render_fleeting_note(
         template
         .replace("{{ZK_ID}}", zk_id)
         .replace("{{DATE}}", today_str())
-        .replace("{{RAW_TEXT}}", raw_text.strip())
-        .replace("{{SUMMARY}}", claude_summary.strip())
         .replace("{{TAGS}}", tag_str)
+        .replace("{{TITLE_JA}}", title_ja.strip() if title_ja else zk_id)
+        .replace("{{RAW_TEXT}}", raw_text.strip())
+        .replace("{{INTERPRETATION}}", interpretation.strip() if interpretation else "")
+        .replace("{{SIGNIFICANCE}}", significance.strip() if significance else "")
+        .replace("{{QUESTIONS}}", questions.strip() if questions else "")
         .replace("{{REFERENCES}}", ref_str)
     )
 
@@ -42,8 +48,12 @@ def render_literature_article_note(
     title: str,
     summary: str,
     key_points: str,
-    tags: list[str],
-    references: list[str],
+    details: str,
+    insights: str,
+    personal_application: str,
+    open_questions: str,
+    tags: list,
+    references: list,
     template: str,
 ) -> str:
     """literature-article テンプレートを埋める"""
@@ -55,8 +65,12 @@ def render_literature_article_note(
         .replace("{{DATE}}", today_str())
         .replace("{{URL}}", url)
         .replace("{{TITLE}}", title)
-        .replace("{{SUMMARY}}", summary.strip())
-        .replace("{{KEY_POINTS}}", key_points.strip())
+        .replace("{{SUMMARY}}", summary.strip() if summary else "")
+        .replace("{{KEY_POINTS}}", key_points.strip() if key_points else "")
+        .replace("{{DETAILS}}", details.strip() if details else "")
+        .replace("{{INSIGHTS}}", insights.strip() if insights else "")
+        .replace("{{PERSONAL_APPLICATION}}", personal_application.strip() if personal_application else "")
+        .replace("{{OPEN_QUESTIONS}}", open_questions.strip() if open_questions else "")
         .replace("{{TAGS}}", tag_str)
         .replace("{{REFERENCES}}", ref_str)
     )
@@ -69,8 +83,12 @@ def render_literature_youtube_note(
     transcript_excerpt: str,
     summary: str,
     key_points: str,
-    tags: list[str],
-    references: list[str],
+    details: str,
+    insights: str,
+    personal_application: str,
+    open_questions: str,
+    tags: list,
+    references: list,
     template: str,
 ) -> str:
     """literature-youtube テンプレートを埋める"""
@@ -82,9 +100,13 @@ def render_literature_youtube_note(
         .replace("{{DATE}}", today_str())
         .replace("{{URL}}", url)
         .replace("{{TITLE}}", title)
-        .replace("{{TRANSCRIPT_EXCERPT}}", transcript_excerpt.strip())
-        .replace("{{SUMMARY}}", summary.strip())
-        .replace("{{KEY_POINTS}}", key_points.strip())
+        .replace("{{SUMMARY}}", summary.strip() if summary else "")
+        .replace("{{KEY_POINTS}}", key_points.strip() if key_points else "")
+        .replace("{{DETAILS}}", details.strip() if details else "")
+        .replace("{{INSIGHTS}}", insights.strip() if insights else "")
+        .replace("{{PERSONAL_APPLICATION}}", personal_application.strip() if personal_application else "")
+        .replace("{{OPEN_QUESTIONS}}", open_questions.strip() if open_questions else "")
+        .replace("{{TRANSCRIPT_EXCERPT}}", transcript_excerpt.strip() if transcript_excerpt else "")
         .replace("{{TAGS}}", tag_str)
         .replace("{{REFERENCES}}", ref_str)
     )
@@ -92,10 +114,14 @@ def render_literature_youtube_note(
 
 def render_permanent_note(
     zk_id: str,
-    idea: str,
+    title: str,
+    thesis: str,
     elaboration: str,
-    backlinks: list[str],
-    tags: list[str],
+    significance: str,
+    application: str,
+    limitations: str,
+    backlinks: list,
+    tags: list,
     template: str,
 ) -> str:
     """permanent-note テンプレートを埋める"""
@@ -105,10 +131,14 @@ def render_permanent_note(
         template
         .replace("{{ZK_ID}}", zk_id)
         .replace("{{DATE}}", today_str())
-        .replace("{{IDEA}}", idea.strip())
-        .replace("{{ELABORATION}}", elaboration.strip())
-        .replace("{{BACKLINKS}}", backlink_str)
         .replace("{{TAGS}}", tag_str)
+        .replace("{{TITLE}}", title.strip() if title else zk_id)
+        .replace("{{THESIS}}", thesis.strip() if thesis else "")
+        .replace("{{ELABORATION}}", elaboration.strip() if elaboration else "")
+        .replace("{{SIGNIFICANCE}}", significance.strip() if significance else "")
+        .replace("{{APPLICATION}}", application.strip() if application else "")
+        .replace("{{LIMITATIONS}}", limitations.strip() if limitations else "")
+        .replace("{{BACKLINKS}}", backlink_str)
     )
 
 

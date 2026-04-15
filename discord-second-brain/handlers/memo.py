@@ -8,6 +8,7 @@ from session.manager import SessionManager
 from services.github_client import GitHubClient
 from services.knowledge_store import KnowledgeStore
 from services import claude_client
+from services.claude_client import parse_json_response
 from utils.formatters import (
     generate_zk_id,
     render_fleeting_note,
@@ -48,7 +49,7 @@ class MemoHandler:
             for r in related:
                 session.add_reference(channel_id, r["id"])
 
-            # 3. Claude で整理
+            # 3. Claude で整理（JSON出力）
             response_text = await claude_client.chat(
                 command="memo",
                 history=session.history,
@@ -58,21 +59,35 @@ class MemoHandler:
             self.sessions.add_message(channel_id, "user", text)
             self.sessions.add_message(channel_id, "assistant", response_text)
 
+            # JSON パース
+            parsed = parse_json_response(response_text)
+            title_ja = parsed.get("title_ja", "")
+            interpretation = parsed.get("interpretation", response_text)
+            significance = parsed.get("significance", "")
+            questions = parsed.get("questions", "")
+
             # 4. タグ抽出（Haiku）
-            tags = await claude_client.extract_tags(text + "\n" + response_text)
+            tags = await claude_client.extract_tags(text + "\n" + interpretation)
 
             # セッションにメタデータ保存（保存時に使用）
             session._memo_raw = text
-            session._memo_summary = response_text
+            session._memo_title_ja = title_ja
+            session._memo_interpretation = interpretation
+            session._memo_significance = significance
+            session._memo_questions = questions
             session._memo_tags = tags
             session._memo_inbox_path = inbox_path
 
             # 5. Discord に返答 + ボタン
             embed = discord.Embed(
-                title="📝 メモを整理しました",
-                description=truncate_for_discord(response_text),
+                title=f"📝 {title_ja}" if title_ja else "📝 メモを整理しました",
+                description=truncate_for_discord(interpretation),
                 color=0x5865F2,
             )
+            if significance:
+                embed.add_field(name="なぜ残すか", value=truncate_for_discord(significance, 500), inline=False)
+            if questions:
+                embed.add_field(name="未解決の問い", value=truncate_for_discord(questions, 400), inline=False)
             if tags:
                 embed.add_field(name="タグ", value=" ".join(f"`#{t}`" for t in tags), inline=False)
             if related:
@@ -103,7 +118,10 @@ class MemoHandler:
             note_content = render_fleeting_note(
                 zk_id=zk_id,
                 raw_text=getattr(session, "_memo_raw", ""),
-                claude_summary=getattr(session, "_memo_summary", ""),
+                title_ja=getattr(session, "_memo_title_ja", ""),
+                interpretation=getattr(session, "_memo_interpretation", ""),
+                significance=getattr(session, "_memo_significance", ""),
+                questions=getattr(session, "_memo_questions", ""),
                 tags=getattr(session, "_memo_tags", []),
                 references=session.references,
                 template=template,
@@ -168,23 +186,27 @@ class MemoHandler:
 
             # 既存 Permanent Note のリストを取得してバックリンク候補とする
             existing_notes = self.github.list_files("10-notes/permanent")
-            backlink_candidates = [
-                p.replace("10-notes/permanent/", "").replace(".md", "")
-                for p in existing_notes
-            ]
             # セマンティック検索でより関連性の高いものを上位に
-            if extracted["idea"]:
-                related = self.store.search(extracted["idea"], n_results=3)
+            search_text = extracted["title"] or extracted["thesis"] or ""
+            if search_text:
+                related = self.store.search(search_text, n_results=3)
                 backlinks = [r["id"] for r in related if r["id"].startswith("ZK-")]
             else:
-                backlinks = backlink_candidates[:3]
+                backlinks = [
+                    p.replace("10-notes/permanent/", "").replace(".md", "")
+                    for p in existing_notes[:3]
+                ]
 
             zk_id = generate_zk_id()
             template = self.github.read_file("_templates/permanent-note.md")
             note_content = render_permanent_note(
                 zk_id=zk_id,
-                idea=extracted["idea"],
+                title=extracted["title"],
+                thesis=extracted["thesis"],
                 elaboration=extracted["elaboration"],
+                significance=extracted["significance"],
+                application=extracted["application"],
+                limitations=extracted["limitations"],
                 backlinks=backlinks,
                 tags=extracted["tags"],
                 template=template,
@@ -205,7 +227,7 @@ class MemoHandler:
 
             embed = discord.Embed(
                 title="🌟 Permanent Note を作成しました",
-                description=f"**{extracted['idea']}**\n\n{extracted['elaboration'][:300]}",
+                description=f"**{extracted['title']}**\n\n{extracted['thesis']}",
                 color=0xFEE75C,
                 url=url,
             )

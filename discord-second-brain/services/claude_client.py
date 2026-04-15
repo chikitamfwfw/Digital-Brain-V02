@@ -1,5 +1,7 @@
 from __future__ import annotations
+import json
 import logging
+import re
 from typing import AsyncGenerator
 
 import anthropic
@@ -106,35 +108,71 @@ async def extract_tags(text: str) -> list[str]:
 async def extract_permanent_idea(session_history: list[dict]) -> dict:
     """
     セッション履歴から原子的アイデアを抽出してPermanent Note用データを返す。
-    Returns: {"idea": str, "elaboration": str, "tags": list[str]}
+    Returns: {"title": str, "thesis": str, "elaboration": str,
+              "significance": str, "application": str, "limitations": str, "tags": list[str]}
     """
     history_text = "\n".join(
-        f"{m['role'].upper()}: {m['content']}" for m in session_history
+        f"{m['role'].upper()}: {m['content'][:500]}" for m in session_history
     )
 
     prompt = (
-        "以下の会話から、最も重要な原子的アイデア（一つのコアコンセプト）を抽出してください。\n\n"
-        "出力形式:\n"
-        "IDEA: （一文でアイデアのタイトル）\n"
-        "ELABORATION: （3〜5文でアイデアの詳細説明）\n"
-        "TAGS: （カンマ区切りでタグ5個以内）\n\n"
+        "以下の会話から、最も重要な原子的アイデア（一つのコアコンセプト）を抽出し、"
+        "Permanent Noteとして構造化してください。\n\n"
+        "必ず以下のJSON形式のみを返してください。\n\n"
+        "```json\n"
+        "{\n"
+        '  "title": "アイデアを10〜20字で表したタイトル",\n'
+        '  "thesis": "アイデアの核心を1〜2文で。何を主張しているか",\n'
+        '  "elaboration": "アイデアの詳細説明を3〜5文で",\n'
+        '  "significance": "なぜこのアイデアが重要か・どんな価値があるか",\n'
+        '  "application": "映像・企画・音楽・IPコンテンツへの接続・応用可能性。関連薄い場合は空文字",\n'
+        '  "limitations": "このアイデアの限界・反証可能性・未検証の前提",\n'
+        '  "tags": ["タグ1", "タグ2"]\n'
+        "}\n"
+        "```\n\n"
         f"会話:\n{history_text}"
     )
 
-    result = await classify("", prompt)
-    lines = result.strip().splitlines()
-    idea = elaboration = ""
-    tags = []
+    client = _get_client()
+    response = await client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=2048,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    result = response.content[0].text.strip()
+    parsed = parse_json_response(result)
 
-    for line in lines:
-        if line.startswith("IDEA:"):
-            idea = line.removeprefix("IDEA:").strip()
-        elif line.startswith("ELABORATION:"):
-            elaboration = line.removeprefix("ELABORATION:").strip()
-        elif line.startswith("TAGS:"):
-            tags = [t.strip() for t in line.removeprefix("TAGS:").split(",") if t.strip()]
+    return {
+        "title": parsed.get("title", ""),
+        "thesis": parsed.get("thesis", ""),
+        "elaboration": parsed.get("elaboration", ""),
+        "significance": parsed.get("significance", ""),
+        "application": parsed.get("application", ""),
+        "limitations": parsed.get("limitations", ""),
+        "tags": parsed.get("tags", []),
+    }
 
-    return {"idea": idea, "elaboration": elaboration, "tags": tags}
+
+def parse_json_response(text: str) -> dict:
+    """
+    Claudeのレスポンスから JSON を抽出してパース。
+    ```json ... ``` ブロック → 生JSON の順で探す。失敗時は空dict。
+    """
+    # ```json ... ``` ブロック
+    m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(1))
+        except json.JSONDecodeError:
+            pass
+    # コードブロックなしの生JSON
+    m = re.search(r'\{.*\}', text, re.DOTALL)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except json.JSONDecodeError:
+            pass
+    return {}
 
 
 async def translate_to_japanese(text: str) -> str:

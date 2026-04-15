@@ -8,6 +8,7 @@ from session.manager import SessionManager
 from services.github_client import GitHubClient
 from services.knowledge_store import KnowledgeStore
 from services import claude_client
+from services.claude_client import parse_json_response
 from services.scraper import scrape
 from services.youtube_client import fetch_transcript, is_supported_video_url
 from utils.formatters import (
@@ -59,7 +60,6 @@ class LinkHandler:
         result = scrape(url)
 
         if not result.success:
-            # ペイウォール通知
             embed = discord.Embed(
                 title="⚠️ 記事を取得できませんでした",
                 description=f"`{url}`\n\nタイトル・URLのみ保存しますか？",
@@ -72,16 +72,24 @@ class LinkHandler:
         # ChromaDB 検索
         related = self.store.search(result.content[:500], n_results=3)
 
-        # Claude 要約
-        prompt = f"以下の記事を要約してください。\n\nタイトル: {result.title}\nURL: {url}\n\n{result.content[:6000]}"
-        summary_response = await claude_client.chat(
+        # Claude 要約（JSON出力）
+        prompt = f"以下の記事を整理してください。\n\nタイトル: {result.title}\nURL: {url}\n\n{result.content[:6000]}"
+        response_text = await claude_client.chat(
             command="link",
             history=session.history,
             user_message=prompt,
             context_notes=related if related else None,
         )
         self.sessions.add_message(channel_id, "user", prompt)
-        self.sessions.add_message(channel_id, "assistant", summary_response)
+        self.sessions.add_message(channel_id, "assistant", response_text)
+
+        parsed = parse_json_response(response_text)
+        summary = parsed.get("summary", response_text)
+        key_points = parsed.get("key_points", "")
+        details = parsed.get("details", "")
+        insights = parsed.get("insights", "")
+        personal_application = parsed.get("personal_application", "")
+        open_questions = parsed.get("open_questions", "")
 
         tags = await claude_client.extract_tags(result.content[:1000])
 
@@ -89,16 +97,24 @@ class LinkHandler:
         session._link_type = "article"
         session._link_url = url
         session._link_title = result.title
-        session._link_summary = summary_response
-        session._link_content = result.content
+        session._link_summary = summary
+        session._link_key_points = key_points
+        session._link_details = details
+        session._link_insights = insights
+        session._link_personal_application = personal_application
+        session._link_open_questions = open_questions
         session._link_tags = tags
 
         embed = discord.Embed(
             title=f"📄 {result.title}",
-            description=truncate_for_discord(summary_response),
+            description=truncate_for_discord(summary),
             color=0x5865F2,
             url=url,
         )
+        if key_points:
+            embed.add_field(name="要点", value=truncate_for_discord(key_points, 600), inline=False)
+        if insights:
+            embed.add_field(name="示唆", value=truncate_for_discord(insights, 400), inline=False)
         if tags:
             embed.add_field(name="タグ", value=" ".join(f"`#{t}`" for t in tags), inline=False)
         if related:
@@ -110,12 +126,10 @@ class LinkHandler:
     # ─── YouTube ───────────────────────────────────────────────────────────────
 
     async def _handle_youtube(self, interaction, url, channel_id, session):
-        # 処理中メッセージを送信（インタラクション応答として）
         await interaction.followup.send("⏳ 動画を処理中です…（長い動画は15分以上かかる場合があります）")
 
         yt_result = await fetch_transcript(url)
 
-        # 結果は channel.send() で送信（インタラクショントークンの15分制限を回避）
         channel = interaction.channel
 
         if not yt_result.success:
@@ -125,39 +139,56 @@ class LinkHandler:
         # ChromaDB 検索
         related = self.store.search(yt_result.transcript[:500], n_results=3)
 
-        # Claude 要約
+        # Claude 要約（JSON出力）
         transcript_excerpt = yt_result.transcript[:6000]
         prompt = (
-            f"以下の動画の文字起こしを要約してください。\n\n"
+            f"以下の動画の文字起こしを整理してください。\n\n"
             f"タイトル: {yt_result.title}\nURL: {url}\n"
             f"取得方法: {yt_result.method} / 元言語: {yt_result.original_lang}\n\n"
             f"{transcript_excerpt}"
         )
-        summary_response = await claude_client.chat(
+        response_text = await claude_client.chat(
             command="link",
             history=session.history,
             user_message=prompt,
             context_notes=related if related else None,
         )
         self.sessions.add_message(channel_id, "user", prompt)
-        self.sessions.add_message(channel_id, "assistant", summary_response)
+        self.sessions.add_message(channel_id, "assistant", response_text)
+
+        parsed = parse_json_response(response_text)
+        summary = parsed.get("summary", response_text)
+        key_points = parsed.get("key_points", "")
+        details = parsed.get("details", "")
+        insights = parsed.get("insights", "")
+        personal_application = parsed.get("personal_application", "")
+        open_questions = parsed.get("open_questions", "")
 
         tags = await claude_client.extract_tags(yt_result.transcript[:1000])
 
         session._link_type = "youtube"
         session._link_url = url
         session._link_title = yt_result.title
-        session._link_summary = summary_response
+        session._link_summary = summary
+        session._link_key_points = key_points
+        session._link_details = details
+        session._link_insights = insights
+        session._link_personal_application = personal_application
+        session._link_open_questions = open_questions
         session._link_transcript = yt_result.transcript
         session._link_tags = tags
 
         embed = discord.Embed(
             title=f"🎬 {yt_result.title}",
-            description=truncate_for_discord(summary_response),
+            description=truncate_for_discord(summary),
             color=0xED4245,
             url=url,
         )
         embed.set_footer(text=f"取得: {yt_result.method} | 元言語: {yt_result.original_lang}")
+        if key_points:
+            embed.add_field(name="要点", value=truncate_for_discord(key_points, 600), inline=False)
+        if insights:
+            embed.add_field(name="示唆", value=truncate_for_discord(insights, 400), inline=False)
         if tags:
             embed.add_field(name="タグ", value=" ".join(f"`#{t}`" for t in tags), inline=False)
         if related:
@@ -187,9 +218,13 @@ class LinkHandler:
                     url=session._link_url,
                     title=session._link_title,
                     transcript_excerpt=getattr(session, "_link_transcript", "")[:2000],
-                    summary=session._link_summary,
-                    key_points="",
-                    tags=session._link_tags,
+                    summary=getattr(session, "_link_summary", ""),
+                    key_points=getattr(session, "_link_key_points", ""),
+                    details=getattr(session, "_link_details", ""),
+                    insights=getattr(session, "_link_insights", ""),
+                    personal_application=getattr(session, "_link_personal_application", ""),
+                    open_questions=getattr(session, "_link_open_questions", ""),
+                    tags=getattr(session, "_link_tags", []),
                     references=session.references,
                     template=template,
                 )
@@ -200,9 +235,13 @@ class LinkHandler:
                     zk_id=zk_id,
                     url=session._link_url,
                     title=session._link_title,
-                    summary=session._link_summary,
-                    key_points="",
-                    tags=session._link_tags,
+                    summary=getattr(session, "_link_summary", ""),
+                    key_points=getattr(session, "_link_key_points", ""),
+                    details=getattr(session, "_link_details", ""),
+                    insights=getattr(session, "_link_insights", ""),
+                    personal_application=getattr(session, "_link_personal_application", ""),
+                    open_questions=getattr(session, "_link_open_questions", ""),
+                    tags=getattr(session, "_link_tags", []),
                     references=session.references,
                     template=template,
                 )
@@ -253,6 +292,10 @@ class LinkHandler:
                 title=title or url,
                 summary="（取得不可 — タイトル・URLのみ保存）",
                 key_points="",
+                details="",
+                insights="",
+                personal_application="",
+                open_questions="",
                 tags=tags,
                 references=references,
                 template=template,
